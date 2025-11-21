@@ -1,5 +1,5 @@
 // ========================================
-// ARQUIVO: app.js (VERSÃO FIREBASE)
+// ARQUIVO: app.js (VERSÃO FINAL CORRIGIDA)
 // ========================================
 
 const { useState, useEffect } = React;
@@ -24,7 +24,7 @@ if (!firebase.apps.length) {
 const db = firebase.firestore();
 
 // ========================================
-// ÍCONES SVG (mantidos do original)
+// ÍCONES SVG
 // ========================================
 const CopyIcon = () => (
   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -57,13 +57,10 @@ function PagamentosManager() {
   const [syncing, setSyncing] = useState(false);
   const [lastSync, setLastSync] = useState(null);
 
-  // ========================================
-  // MUDANÇA 1: Carregar do Firestore + Listener em tempo real
-  // ========================================
+  // Carregar do Firestore + Listener em tempo real
   useEffect(() => {
     loadData();
     
-    // Listener para sincronização automática em tempo real
     const unsubscribe = db.collection('pagamentos')
       .orderBy('ordem')
       .onSnapshot((snapshot) => {
@@ -82,13 +79,9 @@ function PagamentosManager() {
         console.error('Erro no listener:', error);
       });
 
-    // Cleanup: desinscrever quando componente desmontar
     return () => unsubscribe();
   }, []);
 
-  // ========================================
-  // MUDANÇA 2: Carregar dados do Firestore
-  // ========================================
   const loadData = async () => {
     try {
       const snapshot = await db.collection('pagamentos')
@@ -110,15 +103,11 @@ function PagamentosManager() {
     }
   };
 
-  // ========================================
-  // MUDANÇA 3: Salvar no Firestore (não mais automático)
-  // ========================================
   const saveRow = async (row) => {
     try {
       setSyncing(true);
       
       if (row.id.toString().includes('temp')) {
-        // Nova linha - criar documento no Firestore
         const newId = Date.now().toString();
         await db.collection('pagamentos').doc(newId).set({
           ...row,
@@ -126,7 +115,6 @@ function PagamentosManager() {
           ordem: Date.now()
         });
       } else {
-        // Atualizar linha existente
         await db.collection('pagamentos').doc(row.id).update({
           data: row.data,
           informacoes: row.informacoes,
@@ -145,9 +133,6 @@ function PagamentosManager() {
     }
   };
 
-  // ========================================
-  // MUDANÇA 4: createEmptyRow com campo 'ordem'
-  // ========================================
   const createEmptyRow = () => ({
     id: 'temp-' + Date.now() + Math.random(),
     data: '',
@@ -166,56 +151,49 @@ function PagamentosManager() {
   };
 
   // ========================================
-  // MUDANÇA 5: updateRow agora salva no Firebase
+  // CORRIGIDO: Nova linha só ao preencher informações
   // ========================================
   const updateRow = (id, field, value) => {
-  setRows(prevRows => {
-    const newRows = prevRows.map(row => {
-      if (row.id === id) {
-        const updatedRow = { ...row, [field]: value };
-        
-        if (field === 'informacoes') {
-          const parsed = parseInformacoes(value);
-          updatedRow.dn = parsed.dn;
-          updatedRow.nomeLoja = parsed.nomeLoja;
+    setRows(prevRows => {
+      const newRows = prevRows.map(row => {
+        if (row.id === id) {
+          const updatedRow = { ...row, [field]: value };
+          
+          if (field === 'informacoes') {
+            const parsed = parseInformacoes(value);
+            updatedRow.dn = parsed.dn;
+            updatedRow.nomeLoja = parsed.nomeLoja;
+          }
+          
+          // Salvar no Firestore quando linha estiver completa
+          if (updatedRow.data && updatedRow.informacoes) {
+            saveRow(updatedRow);
+          }
+          
+          return updatedRow;
         }
-        
-        // Salvar no Firestore quando linha estiver completa
-        if (updatedRow.data && updatedRow.informacoes) {
-          saveRow(updatedRow);
-        }
-        
-        return updatedRow;
+        return row;
+      });
+
+      // Adicionar nova linha SOMENTE quando preencher informações
+      const lastRow = newRows[newRows.length - 1];
+      if (field === 'informacoes' && value.trim() !== '' && lastRow.id === id) {
+        newRows.push(createEmptyRow());
       }
-      return row;
+
+      return newRows;
     });
+  };
 
-    // Adicionar nova linha se a última linha tiver qualquer campo preenchido
-    const lastRow = newRows[newRows.length - 1];
-    const isLastRowFilled = lastRow.data || lastRow.informacoes || lastRow.crm;
-    
-    if (isLastRowFilled) {
-      newRows.push(createEmptyRow());
-    }
-
-    return newRows;
-  });
-};
-
-  // ========================================
-  // MUDANÇA 6: clearRow deleta do Firestore
-  // ========================================
   const clearRow = async (id) => {
     try {
-      // Deletar do Firestore se não for linha temporária
       if (!id.toString().includes('temp')) {
         await db.collection('pagamentos').doc(id).delete();
       }
       
       setRows(prevRows => {
         const newRows = prevRows.filter(row => row.id !== id);
-        // Garantir que sempre haja pelo menos uma linha vazia
-        if (newRows.length === 0 || newRows.every(row => row.data || row.informacoes)) {
+        if (newRows.length === 0) {
           newRows.push(createEmptyRow());
         }
         return newRows;
@@ -227,18 +205,12 @@ function PagamentosManager() {
     }
   };
 
-  // ========================================
-  // MUDANÇA 7: resetAll deleta todos do Firestore
-  // ========================================
   const resetAll = async () => {
     if (confirm('⚠️ ATENÇÃO: Isso vai apagar TODOS os dados de TODOS os usuários! Tem certeza?')) {
       try {
         setSyncing(true);
         
-        // Buscar todos os documentos
         const snapshot = await db.collection('pagamentos').get();
-        
-        // Usar batch para deletar todos de uma vez
         const batch = db.batch();
         snapshot.forEach((doc) => {
           batch.delete(doc.ref);
@@ -272,6 +244,24 @@ function PagamentosManager() {
     return lastSync.toLocaleTimeString('pt-BR');
   };
 
+  // ========================================
+  // CORRIGIDO: Converter data para formato brasileiro
+  // ========================================
+  const formatDateToBR = (dateString) => {
+    if (!dateString) return '';
+    const [year, month, day] = dateString.split('-');
+    return `${day}/${month}/${year}`;
+  };
+
+  const formatDateToISO = (dateString) => {
+    if (!dateString) return '';
+    const parts = dateString.split('/');
+    if (parts.length === 3) {
+      return `${parts[2]}-${parts[1]}-${parts[0]}`;
+    }
+    return dateString;
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center">
@@ -286,7 +276,6 @@ function PagamentosManager() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-8">
       <div className="max-w-7xl mx-auto">
-        {/* Header com informações de sincronização */}
         <div className="bg-white rounded-xl shadow-2xl p-6 mb-6">
           <div className="flex justify-between items-start">
             <div>
@@ -308,7 +297,6 @@ function PagamentosManager() {
           </div>
         </div>
 
-        {/* Tabela */}
         <div className="bg-white rounded-xl shadow-2xl overflow-hidden mb-4">
           <div className="overflow-x-auto">
             <table className="w-full">
@@ -401,7 +389,6 @@ function PagamentosManager() {
           </div>
         </div>
 
-        {/* Botões */}
         <div className="flex justify-center gap-4">
           <button
             onClick={resetAll}
@@ -422,7 +409,6 @@ function PagamentosManager() {
           </button>
         </div>
 
-        {/* Status de conexão */}
         <div className="mt-8 text-center text-gray-600 text-sm space-y-2">
           <p className="flex items-center justify-center gap-2">
             <span className="inline-block w-3 h-3 bg-green-500 rounded-full animate-pulse"></span>
@@ -436,7 +422,5 @@ function PagamentosManager() {
     </div>
   );
 }
-
-// Renderizar aplicação
 
 ReactDOM.render(<PagamentosManager />, document.getElementById('root'));
