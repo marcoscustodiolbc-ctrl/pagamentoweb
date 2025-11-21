@@ -40,6 +40,13 @@ const TrashIcon = () => (
   </svg>
 );
 
+const PlusIcon = () => (
+  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+    <line x1="12" y1="5" x2="12" y2="19"></line>
+    <line x1="5" y1="12" x2="19" y2="12"></line>
+  </svg>
+);
+
 const RefreshIcon = () => (
   <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
     <polyline points="23 4 23 10 17 10"></polyline>
@@ -62,7 +69,7 @@ function PagamentosManager() {
     loadData();
     
     const unsubscribe = db.collection('pagamentos')
-      .orderBy('ordem')
+      .orderBy('ordem', 'desc') // Ordenar do mais recente para o mais antigo
       .onSnapshot((snapshot) => {
         const data = [];
         snapshot.forEach((doc) => {
@@ -85,7 +92,7 @@ function PagamentosManager() {
   const loadData = async () => {
     try {
       const snapshot = await db.collection('pagamentos')
-        .orderBy('ordem')
+        .orderBy('ordem', 'desc') // Ordenar do mais recente para o mais antigo
         .get();
       
       const data = [];
@@ -151,7 +158,7 @@ function PagamentosManager() {
   };
 
   // ========================================
-  // CORRIGIDO: Nova linha só ao preencher informações
+  // CORRIGIDO: updateRow SEM criar linha automática
   // ========================================
   const updateRow = (id, field, value) => {
     setRows(prevRows => {
@@ -175,13 +182,17 @@ function PagamentosManager() {
         return row;
       });
 
-      // Adicionar nova linha SOMENTE quando preencher informações
-      const lastRow = newRows[newRows.length - 1];
-      if (field === 'informacoes' && value.trim() !== '' && lastRow.id === id) {
-        newRows.push(createEmptyRow());
-      }
-
       return newRows;
+    });
+  };
+
+  // ========================================
+  // NOVO: Adicionar linha no TOPO
+  // ========================================
+  const addNewRow = () => {
+    setRows(prevRows => {
+      const newRow = createEmptyRow();
+      return [newRow, ...prevRows]; // Adiciona no início do array
     });
   };
 
@@ -374,13 +385,22 @@ function PagamentosManager() {
                       />
                     </td>
                     <td className="px-4 py-3 text-center">
-                      <button
-                        onClick={() => clearRow(row.id)}
-                        className="p-2 text-red-600 hover:text-red-700 hover:bg-red-50 rounded-lg transition-colors"
-                        title="Limpar linha"
-                      >
-                        <TrashIcon />
-                      </button>
+                      <div className="flex items-center justify-center gap-2">
+                        <button
+                          onClick={addNewRow}
+                          className="p-2 text-white bg-green-600 hover:bg-green-700 rounded-lg transition-colors"
+                          title="Adicionar nova linha"
+                        >
+                          <PlusIcon />
+                        </button>
+                        <button
+                          onClick={() => clearRow(row.id)}
+                          className="p-2 text-red-600 hover:text-red-700 hover:bg-red-50 rounded-lg transition-colors"
+                          title="Limpar linha"
+                        >
+                          <TrashIcon />
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))}
