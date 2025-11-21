@@ -169,36 +169,38 @@ function PagamentosManager() {
   // MUDANÇA 5: updateRow agora salva no Firebase
   // ========================================
   const updateRow = (id, field, value) => {
-    setRows(prevRows => {
-      const newRows = prevRows.map(row => {
-        if (row.id === id) {
-          const updatedRow = { ...row, [field]: value };
-          
-          if (field === 'informacoes') {
-            const parsed = parseInformacoes(value);
-            updatedRow.dn = parsed.dn;
-            updatedRow.nomeLoja = parsed.nomeLoja;
-          }
-          
-          // Salvar no Firestore quando linha estiver completa
-          if (updatedRow.data && updatedRow.informacoes) {
-            saveRow(updatedRow);
-          }
-          
-          return updatedRow;
+  setRows(prevRows => {
+    const newRows = prevRows.map(row => {
+      if (row.id === id) {
+        const updatedRow = { ...row, [field]: value };
+        
+        if (field === 'informacoes') {
+          const parsed = parseInformacoes(value);
+          updatedRow.dn = parsed.dn;
+          updatedRow.nomeLoja = parsed.nomeLoja;
         }
-        return row;
-      });
-
-      // Adicionar nova linha se a última está preenchida
-      const lastRow = newRows[newRows.length - 1];
-      if (lastRow.data && lastRow.informacoes) {
-        newRows.push(createEmptyRow());
+        
+        // Salvar no Firestore quando linha estiver completa
+        if (updatedRow.data && updatedRow.informacoes) {
+          saveRow(updatedRow);
+        }
+        
+        return updatedRow;
       }
-
-      return newRows;
+      return row;
     });
-  };
+
+    // Adicionar nova linha se a última linha tiver qualquer campo preenchido
+    const lastRow = newRows[newRows.length - 1];
+    const isLastRowFilled = lastRow.data || lastRow.informacoes || lastRow.crm;
+    
+    if (isLastRowFilled) {
+      newRows.push(createEmptyRow());
+    }
+
+    return newRows;
+  });
+};
 
   // ========================================
   // MUDANÇA 6: clearRow deleta do Firestore
@@ -436,4 +438,5 @@ function PagamentosManager() {
 }
 
 // Renderizar aplicação
+
 ReactDOM.render(<PagamentosManager />, document.getElementById('root'));
